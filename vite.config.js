@@ -9,9 +9,11 @@ export default defineConfig(({ command }) => {
       [command === 'serve' ? 'global' : '_global']: {},
     },
     root: 'src',
+    optimizeDeps: {
+      entries: [],
+    },
     build: {
       sourcemap: true,
-
       rollupOptions: {
         input: glob.sync('./src/*.html'),
         output: {
