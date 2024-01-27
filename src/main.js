@@ -1,37 +1,53 @@
-import axios from 'axios';
-import iziToast from 'izitoast';
-import 'izitoast/dist/css/iziToast.min.css';
 import SimpleLightbox from 'simplelightbox';
 import 'simplelightbox/dist/simple-lightbox.min.css';
 
+import getPhotos from './js/pixabayApi';
+import createMarkup from './js/createMarkup';
+import slowScroll from './js/slowScroll';
+import showMessage from './js/showMessage';
+
+// Pick search form, gallery and pagination element
 const searchForm = document.querySelector('.search-form');
 const galleryContainer = document.querySelector('.gallery');
 const buttonLoadMore = document.querySelector('.load-more');
 
+// Set variables to store query, current page and total pages available
 let currentPage = 0;
-let currentQuery;
 let totalPages = 0;
-let lightbox;
+// Uses ligtbox for slider component
+let lightbox, currentQuery;
 
-function handleSubmit(event, contentContainer, buttonMore) {
+// Set intersaction observer for the element at the end of the galery
+let observer = new IntersectionObserver(loadMore, {
+  // Set up how far from target viewport shold be
+  rootMargin: '0px',
+});
+
+// Clear gallery, gets input value, sends get request and create gallery
+function handleSubmit(event, contentContainer) {
+  // Prevent page refreshing
   event.preventDefault();
 
+  // Delete any observers and clear gallery
+  observer.unobserve(buttonLoadMore);
   contentContainer.innerHTML = '';
 
-  // buttonMore.classList.add('hidden');
-
+  // Get search query from form
   const formValue = new FormData(event.currentTarget);
   const { searchQuery } = Object.fromEntries(formValue.entries());
 
-  currentPage += 1;
-
+  // If query is new, then starts from the 1 page
   if (currentQuery !== searchQuery.toLowerCase()) {
     currentQuery = searchQuery.toLowerCase();
-    currentPage = 1;
+    currentPage = 0;
   }
+  // Change page number after each search
+  currentPage += 1;
 
+  // Sends get request to receive 40 photos
   getPhotos(currentQuery, currentPage)
     .then(data => {
+      // If doesn't find photos, then shows error message
       if (data.hits.length === 0) {
         showMessage(
           'Sorry, there are no images matching your search query. Please try again.',
@@ -39,144 +55,69 @@ function handleSubmit(event, contentContainer, buttonMore) {
         );
         return;
       }
-      if (currentPage === 1) {
+
+      // Calculates total pages and shows number of photos available (only if it is first search)
+      if (currentPage == 1) {
         totalPages = Math.ceil(data.totalHits / 40);
         showMessage(`Hooray! We found ${data.totalHits} images.`, 'green');
       }
 
-      if (totalPages > currentPage) {
-        // buttonMore.classList.remove('hidden');
-        infiniteScroll(buttonLoadMore);
-      }
-
+      // Adds photos cards to DOM
       createMarkup(data.hits, galleryContainer);
 
+      // If total pages available bigger than current page, then ads infinite scroll
+      if (totalPages > currentPage) {
+        observer.observe(buttonLoadMore);
+      }
+
+      // Creates slider component
       lightbox = new SimpleLightbox('.photo-card a');
     })
     .catch(error => {
+      // Catch any errors in order to prevent full stop of application
       console.log(error.message);
     });
 }
 
+// Invokes handleSubmit after search button click
 searchForm.addEventListener('submit', event => {
   handleSubmit(event, galleryContainer, buttonLoadMore);
 });
 
-function createMarkup(data, container) {
-  const markup = data
-    .map(
-      ({
-        webformatURL,
-        largeImageURL,
-        tags,
-        likes,
-        views,
-        comments,
-        downloads,
-      }) => {
-        return `<div class="photo-card">
-          <a href=${largeImageURL}>
-            <img src=${webformatURL} alt='${tags}' loading="lazy" width="300" height="200" />
-          </a>
-          <div class="info">
-              <p class="info-item">
-                <b>Likes</b>
-                ${likes}
-              </p>
-              <p class="info-item">
-                <b>Views</b>
-                ${views}
-              </p>
-              <p class="info-item">
-                  <b>Comments</b>
-                  ${comments}
-              </p>
-              <p class="info-item">
-                  <b>Downloads</b>
-                  ${downloads}
-              </p>
-          </div>
-        </div>`;
-      }
-    )
-    .join('');
-
-  container.insertAdjacentHTML('beforeend', markup);
-}
-
-function showMessage(message, color) {
-  return iziToast.show({
-    message: `${message}`,
-    color: `${color}`,
-    position: 'topRight',
-    transitionIn: 'fadeInDown',
-  });
-}
-
-function loadMore(entries, observer) {
+// Load next page with images after viewport reached bottom of the gallery
+function loadMore(entries) {
   entries.forEach(entry => {
+    // Checks if viewport reached observable element
     if (entry.isIntersecting) {
+      // Increase page number for the get request
       currentPage += 1;
 
+      // Sends get request to receive 40 photos
       getPhotos(currentQuery, currentPage)
         .then(data => {
+          // Adds photos cards to the end of gallery
           createMarkup(data.hits, galleryContainer);
+
+          // Refresh slider component in order to add new photos
           lightbox.refresh();
-          slowScroll();
+
+          // Scrolls two rows further
+          slowScroll(galleryContainer);
+
+          // If user reaches the end, shows error message and stops intersection observer
           if (totalPages <= currentPage) {
-            // buttonLoadMore.classList.add('hidden');
             showMessage(
               "We're sorry, but you've reached the end of search results.",
               'red'
             );
+            observer.unobserve(buttonLoadMore);
             return;
           }
         })
         .catch(error => {
+          // Catch any errors in order to prevent full stop of application
           console.log(error.message);
         });
     }
   });
-}
-
-async function getPhotos(query, page) {
-  const API_KEY = '42008350-fb6f0dd148ae0c7c4d4cd1d49';
-
-  const responseAPI = await axios.get('https://pixabay.com/api/', {
-    params: {
-      key: API_KEY,
-      q: `${query}`,
-      image_type: 'photo',
-      orientation: 'horizontal',
-      safesearch: true,
-      per_page: 40,
-      page: `${page}`,
-    },
-  });
-
-  const { totalHits, hits } = await responseAPI.data;
-
-  return {
-    totalHits,
-    hits,
-  };
-}
-
-function slowScroll() {
-  const { height: cardHeight } = document
-    .querySelector('.gallery')
-    .firstElementChild.getBoundingClientRect();
-
-  window.scrollBy({
-    top: cardHeight * 2,
-    behavior: 'smooth',
-  });
-}
-
-function infiniteScroll(target) {
-  let observer = new IntersectionObserver(loadMore, {
-    rootMargin: '0px',
-  });
-
-  observer.observe(target);
 }

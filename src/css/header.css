@@ -1,3 +1,4 @@
+/* Header container */
 .header {
   display: flex;
   position: sticky;
@@ -9,12 +10,14 @@
   box-shadow: 0 -1px 15px 1px #dedede;
 }
 
+/* Search input */
 .search-form > input {
   padding: 10px 20px;
   border-radius: 10px 0 0 10px;
   border: 1px solid #c3c3c3;
 }
 
+/* Search button */
 .search-form > button {
   padding: 10px 20px;
   border-radius: 0 10px 10px 0;
