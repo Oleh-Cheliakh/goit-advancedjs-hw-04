@@ -88,6 +88,7 @@ async function handleSubmit(event, contentContainer) {
         'Sorry, there are no more images matching your search query',
         'yellow'
       );
+      currentPage = 0;
     }
 
     // Refresh slider component content
