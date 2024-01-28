@@ -88,6 +88,8 @@ async function handleSubmit(event, contentContainer) {
         'Sorry, there are no more images matching your search query',
         'yellow'
       );
+
+      // Prevent next page loading if no more pages available
       currentPage = 0;
     }
 
