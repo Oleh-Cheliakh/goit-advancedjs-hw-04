@@ -14,8 +14,10 @@ const buttonLoadMore = document.querySelector('.load-more');
 // Set variables to store query, current page and total pages available
 let currentPage = 0;
 let totalPages = 0;
+let currentQuery;
+
 // Uses ligtbox for slider component
-let lightbox, currentQuery;
+let lightbox = new SimpleLightbox('.photo-card a');
 
 // Set intersaction observer for the element at the end of the galery
 let observer = new IntersectionObserver(loadMore, {
@@ -24,7 +26,7 @@ let observer = new IntersectionObserver(loadMore, {
 });
 
 // Clear gallery, gets input value, sends get request and create gallery
-function handleSubmit(event, contentContainer) {
+async function handleSubmit(event, contentContainer) {
   // Prevent page refreshing
   event.preventDefault();
 
@@ -34,49 +36,66 @@ function handleSubmit(event, contentContainer) {
 
   // Get search query from form
   const formValue = new FormData(event.currentTarget);
-  const { searchQuery } = Object.fromEntries(formValue.entries());
+  let { searchQuery } = Object.fromEntries(formValue.entries());
+
+  // Clear side spaces and make query lowercase for the proper string comparison
+  searchQuery = searchQuery.trim().toLowerCase();
+
+  // Show notification if user hasn't type anything
+  if (!searchQuery) {
+    showMessage('You have to write a search query', 'yellow');
+    event.currentTarget.reset();
+    return;
+  }
 
   // If query is new, then starts from the 1 page
-  if (currentQuery !== searchQuery.toLowerCase()) {
-    currentQuery = searchQuery.toLowerCase();
+  if (currentQuery !== searchQuery) {
+    currentQuery = searchQuery;
     currentPage = 0;
   }
+
   // Change page number after each search
   currentPage += 1;
 
-  // Sends get request to receive 40 photos
-  getPhotos(currentQuery, currentPage)
-    .then(data => {
-      // If doesn't find photos, then shows error message
-      if (data.hits.length === 0) {
-        showMessage(
-          'Sorry, there are no images matching your search query. Please try again.',
-          'red'
-        );
-        return;
-      }
+  try {
+    // Sends get request to receive 40 photos
+    const { totalHits, hits } = await getPhotos(currentQuery, currentPage);
 
-      // Calculates total pages and shows number of photos available (only if it is first search)
-      if (currentPage == 1) {
-        totalPages = Math.ceil(data.totalHits / 40);
-        showMessage(`Hooray! We found ${data.totalHits} images.`, 'green');
-      }
+    // If doesn't find photos, then shows error message
+    if (hits.length === 0) {
+      showMessage(
+        'Sorry, there are no images matching your search query. Please try again.',
+        'red'
+      );
+      return;
+    }
 
-      // Adds photos cards to DOM
-      createMarkup(data.hits, galleryContainer);
+    // Calculates total pages and shows number of photos available (only if it is first search)
+    if (currentPage == 1) {
+      totalPages = Math.ceil(totalHits / 40);
+      showMessage(`Hooray! We found ${totalHits} images.`, 'green');
+    }
 
-      // If total pages available bigger than current page, then ads infinite scroll
-      if (totalPages > currentPage) {
-        observer.observe(buttonLoadMore);
-      }
+    // Adds photos cards to DOM
+    createMarkup(hits, galleryContainer);
 
-      // Creates slider component
-      lightbox = new SimpleLightbox('.photo-card a');
-    })
-    .catch(error => {
-      // Catch any errors in order to prevent full stop of application
-      console.log(error.message);
-    });
+    // If total pages available bigger than current page, then ads infinite scroll
+    if (totalPages > currentPage) {
+      observer.observe(buttonLoadMore);
+    } else {
+      // If no more pages available then shows message
+      showMessage(
+        'Sorry, there are no more images matching your search query',
+        'yellow'
+      );
+    }
+
+    // Refresh slider component content
+    lightbox.refresh();
+  } catch (error) {
+    // Catch any errors in order to prevent full stop of application
+    console.log(error.message);
+  }
 }
 
 // Invokes handleSubmit after search button click
@@ -86,38 +105,38 @@ searchForm.addEventListener('submit', event => {
 
 // Load next page with images after viewport reached bottom of the gallery
 function loadMore(entries) {
-  entries.forEach(entry => {
+  entries.forEach(async entry => {
     // Checks if viewport reached observable element
     if (entry.isIntersecting) {
       // Increase page number for the get request
       currentPage += 1;
 
       // Sends get request to receive 40 photos
-      getPhotos(currentQuery, currentPage)
-        .then(data => {
-          // Adds photos cards to the end of gallery
-          createMarkup(data.hits, galleryContainer);
+      try {
+        const { hits } = await getPhotos(currentQuery, currentPage);
 
-          // Refresh slider component in order to add new photos
-          lightbox.refresh();
+        // Adds photos cards to the end of gallery
+        createMarkup(hits, galleryContainer);
 
-          // Scrolls two rows further
-          slowScroll(galleryContainer);
+        // Refresh slider component in order to add new photos
+        lightbox.refresh();
 
-          // If user reaches the end, shows error message and stops intersection observer
-          if (totalPages <= currentPage) {
-            showMessage(
-              "We're sorry, but you've reached the end of search results.",
-              'red'
-            );
-            observer.unobserve(buttonLoadMore);
-            return;
-          }
-        })
-        .catch(error => {
-          // Catch any errors in order to prevent full stop of application
-          console.log(error.message);
-        });
+        // Scrolls two rows further
+        slowScroll(galleryContainer);
+
+        // If user reaches the end, shows error message and stops intersection observer
+        if (totalPages <= currentPage) {
+          showMessage(
+            "We're sorry, but you've reached the end of search results.",
+            'red'
+          );
+          observer.unobserve(buttonLoadMore);
+          return;
+        }
+      } catch (error) {
+        // Catch any errors in order to prevent full stop of application
+        console.log(error.message);
+      }
     }
   });
 }
